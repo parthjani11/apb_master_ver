@@ -1,14 +1,3 @@
-// ============================================================================
-// apb_test.sv
-// KEY FIX: Base test uses build() + start() separately
-//          test_regression calls env.build() ONCE then env.start() 6×
-//          Each phase calls scb.reset_counts() for clean per-phase reporting
-//          No more env.run() calling $finish on Phase 1 and killing the rest
-// ============================================================================
-
-// ----------------------------------------------------------------------------
-// Base Test — fully random, base transaction constraints
-// ----------------------------------------------------------------------------
 class apb_test;
     virtual apb_if vif;
     apb_env        env;
@@ -24,10 +13,6 @@ class apb_test;
     endtask
 endclass
 
-
-// ----------------------------------------------------------------------------
-// Directed: Wait State Test
-// ----------------------------------------------------------------------------
 class test_wait_state extends apb_test;
     apb_wait_state_transaction trans_wait;
 
@@ -44,10 +29,6 @@ class test_wait_state extends apb_test;
     endtask
 endclass
 
-
-// ----------------------------------------------------------------------------
-// Directed: Byte Strobe Test
-// ----------------------------------------------------------------------------
 class test_strobe extends apb_test;
     apb_strobe_transaction trans_strobe;
 
@@ -64,10 +45,6 @@ class test_strobe extends apb_test;
     endtask
 endclass
 
-
-// ----------------------------------------------------------------------------
-// Directed: Error Response Test
-// ----------------------------------------------------------------------------
 class test_error extends apb_test;
     apb_error_transaction trans_error;
 
@@ -84,13 +61,6 @@ class test_error extends apb_test;
     endtask
 endclass
 
-
-// ----------------------------------------------------------------------------
-// Regression Container — 6 directed phases back-to-back
-//   env.build() called ONCE (creates one set of mailboxes and components)
-//   env.start() called per phase (all components loop num_transactions each)
-//   scb.reset_counts() called before each phase for per-phase summary
-// ----------------------------------------------------------------------------
 class test_regression extends apb_test;
 
     apb_rw_transaction              trans_rw;
