@@ -1,9 +1,3 @@
-// ============================================================================
-// apb_gen.sv
-// KEY FIX: Removed gen_ended event — env.start() uses fork...join
-//          with finite loops so event-based termination is not needed
-// ============================================================================
-
 class apb_gen;
 
     apb_transaction               blueprint;
@@ -20,8 +14,6 @@ class apb_gen;
             assert(blueprint.randomize() == 1) else
                 $fatal(1, "[GEN] Randomization FAILED at TXN#%0d", i);
 
-            // Put a deep copy — NOT the blueprint handle itself
-            // Prevents aliasing: next randomize() must not corrupt already-sent packets
             mbx_g2d.put(blueprint.copy());
 
             $display("[GEN @%0t] TXN#%03d | %s | ADDR=%0h | WDATA=%0h | STRB=%0b | WAIT=%0d | PSLVERR=%0b",
