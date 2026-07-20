@@ -1,0 +1,215 @@
+`include "defines.svh"
+
+interface apb_if(input bit PCLK, input bit PRESETn);
+
+    // ----------------------------------------------------------
+    // APB Bus Signals  Master Outputs (driven by DUT)
+    // ----------------------------------------------------------
+    logic [`addr_width-1:0]      PADDR;
+    logic                        PSEL;
+    logic                        PENABLE;
+    logic                        PWRITE;
+    logic [`data_width-1:0]      PWDATA;
+    logic [(`data_width/8)-1:0]  PSTRB;
+
+    // ----------------------------------------------------------
+    // APB Bus Signals  Slave Outputs (driven by testbench/driver)
+    // ----------------------------------------------------------
+    logic [`data_width-1:0]      PRDATA;
+    logic                        PREADY;
+    logic                        PSLVERR;
+
+    // ----------------------------------------------------------
+    // Master User Interface  Input side (driven by testbench/driver)
+    // ----------------------------------------------------------
+    logic                        transfer;
+    logic                        write_read;
+    logic [`addr_width-1:0]      addr_in;
+    logic [`data_width-1:0]      wdata_in;
+    logic [(`data_width/8)-1:0]  strb_in;
+
+    // ----------------------------------------------------------
+    // Master User Interface  Output side (driven by DUT)
+    // ----------------------------------------------------------
+    logic [`data_width-1:0]      rdata_out;
+    logic                        transfer_done;
+    logic                        error;
+
+    // ----------------------------------------------------------
+    // Driver Clocking Block
+    // ----------------------------------------------------------
+    clocking cb_driver @(posedge PCLK);
+        default input #1ns output #1ns;
+        input  PADDR, PWDATA, PSTRB;
+        input  PSEL, PENABLE, PWRITE;
+        input  transfer_done, error;
+        input  PRESETn;
+        output PRDATA, PREADY, PSLVERR;
+        output transfer, write_read;
+        output addr_in, wdata_in, strb_in;
+    endclocking
+
+    // ----------------------------------------------------------
+    // Monitor Clocking Block
+    // ----------------------------------------------------------
+    clocking cb_monitor @(posedge PCLK);
+        default input #1ns;
+        input  PADDR, PWDATA, PSTRB;
+        input  PSEL, PENABLE, PWRITE;
+        input  PRDATA, PREADY, PSLVERR;
+        input  transfer, write_read;
+        input  addr_in, wdata_in, strb_in;
+        input  transfer_done, error;
+        input  PRESETn;
+    endclocking
+
+    // ----------------------------------------------------------
+    // Modports
+    // ----------------------------------------------------------
+    modport DRV (clocking cb_driver);
+    modport MON (clocking cb_monitor);
+
+    // ============================================================================
+    // SystemVerilog Assertions (SVA) - Verification Plan Mapping
+    // ============================================================================
+
+    // ----------------------------------------------------------------------------
+    // GROUP 1 & 2: Reset and IDLE Behavior[cite: 14]
+    // ----------------------------------------------------------------------------
+    property p_reset_deassert;
+        @(posedge PCLK) (!PRESETn) |=> (!PSEL && !PENABLE && !transfer_done && !error);
+    endproperty
+    a_reset_deassert: assert property(p_reset_deassert) 
+        else $error("[SVA FAIL] Group 1: FSM did not initialize to IDLE cleanly after PRESETn deassertion.");
+
+    property p_idle_no_transfer;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (!PSEL && !PENABLE && !transfer) |=> (!PSEL && !PENABLE);
+    endproperty
+    a_idle_no_transfer: assert property(p_idle_no_transfer) 
+        else $error("[SVA FAIL] Group 2: APB bus did not remain in IDLE while transfer=0.");
+
+    // ----------------------------------------------------------------------------
+    // GROUP 3: PSEL Behavior[cite: 14]
+    // ----------------------------------------------------------------------------
+    property p_psel_asserts_on_transfer;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (!PSEL && !PENABLE && transfer) |=> (PSEL && !PENABLE);
+    endproperty
+    a_psel_asserts_on_transfer: assert property(p_psel_asserts_on_transfer) 
+        else $error("[SVA FAIL] Group 3: PSEL failed to assert on the cycle after transfer request in IDLE.");
+
+    property p_psel_stable_during_wait;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE && !PREADY) |=> PSEL;
+    endproperty
+    a_psel_stable_during_wait: assert property(p_psel_stable_during_wait) 
+        else $error("[SVA FAIL] Group 3: PSEL deasserted prematurely during a wait state (PREADY=0).");
+
+    property p_psel_deasserts_after_completion;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE && PREADY && !transfer) |=> (!PSEL);
+    endproperty
+    a_psel_deasserts_after_completion: assert property(p_psel_deasserts_after_completion) 
+        else $error("[SVA FAIL] Group 3: PSEL failed to deassert after transaction completion when no new transfer is pending.");
+
+    // ----------------------------------------------------------------------------
+    // GROUP 4: PENABLE Behavior[cite: 14]
+    // ----------------------------------------------------------------------------
+    property p_penable_exactly_1_cycle;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && !PENABLE) |=> (PSEL && PENABLE);
+    endproperty
+    a_penable_exactly_1_cycle: assert property(p_penable_exactly_1_cycle) 
+        else $error("[SVA FAIL] Group 4: PENABLE did not assert exactly 1 cycle after PSEL (SETUP to ACCESS).");
+
+    property p_penable_stable_during_wait;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE && !PREADY) |=> PENABLE;
+    endproperty
+    a_penable_stable_during_wait: assert property(p_penable_stable_during_wait) 
+        else $error("[SVA FAIL] Group 4: PENABLE deasserted prematurely during a wait state (PREADY=0).");
+
+    property p_penable_deasserts_after_completion;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE && PREADY) |=> (!PENABLE);
+    endproperty
+    a_penable_deasserts_after_completion: assert property(p_penable_deasserts_after_completion) 
+        else $error("[SVA FAIL] Group 4: PENABLE failed to deassert after PREADY=1 completion edge.");
+
+    // ----------------------------------------------------------------------------
+    // GROUP 5, 6, 8, 9: Signal Stability (PWRITE, PADDR, PWDATA)[cite: 14]
+    // ----------------------------------------------------------------------------
+    property p_pwrite_stable;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && !(PENABLE && PREADY)) |=> ##1 $stable(PWRITE);
+    endproperty
+    a_pwrite_stable: assert property(p_pwrite_stable) 
+        else $error("[SVA FAIL] Group 5/8: PWRITE toggled mid-transaction.");
+
+    property p_paddr_stable;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PWRITE && PENABLE && !(PREADY)) |=> $stable(PADDR);
+    endproperty
+    a_paddr_stable: assert property(p_paddr_stable) 
+        else $error("[SVA FAIL] Group 6/9: PADDR changed mid-transaction (must remain locked during wait states).");
+
+    property p_pwdata_stable;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PWRITE && PENABLE && !(PREADY)) |=> $stable(PWRITE);
+    endproperty
+    a_pwdata_stable: assert property(p_pwdata_stable) 
+        else $error("[SVA FAIL] Group 6: PWDATA changed mid-write transaction.");
+
+    // ----------------------------------------------------------------------------
+    // GROUP 11: PSTRB Behavior[cite: 14]
+    // ----------------------------------------------------------------------------
+    property p_pstrb_zero_during_read;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && !PWRITE) |-> (PSTRB == 0);
+    endproperty
+    a_pstrb_zero_during_read: assert property(p_pstrb_zero_during_read) 
+        else $error("[SVA FAIL] Group 11: PSTRB must be 4'b0000 during read operations.");
+
+    property p_pstrb_stable;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PWRITE && PENABLE && !(PREADY)) |=> $stable(PSTRB);
+    endproperty
+    a_pstrb_stable: assert property(p_pstrb_stable) 
+        else $error("[SVA FAIL] Group 11: PSTRB changed mid-write transaction.");
+
+    // ----------------------------------------------------------------------------
+    // GROUP 12: transfer_done User Pulse[cite: 14]
+    // ----------------------------------------------------------------------------
+    property p_transfer_done_on_completion;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE && PREADY) |=> (transfer_done == 1);
+    endproperty
+    a_transfer_done_on_completion: assert property(p_transfer_done_on_completion) 
+        else $error("[SVA FAIL] Group 12: transfer_done did not assert following PREADY=1.");
+
+    property p_transfer_done_pulse_width;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (transfer_done) |=> (!transfer_done);
+    endproperty
+    a_transfer_done_pulse_width: assert property(p_transfer_done_pulse_width) 
+        else $error("[SVA FAIL] Group 12: transfer_done pulse stretched beyond 1 PCLK cycle.");
+
+    // ----------------------------------------------------------------------------
+    // GROUP 13: error Output Pulse[cite: 14]
+    // ----------------------------------------------------------------------------
+    property p_error_set_on_pslverr;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE && PREADY && PSLVERR) |=> (error == 1);
+    endproperty
+    a_error_set_on_pslverr: assert property(p_error_set_on_pslverr) 
+        else $error("[SVA FAIL] Group 13: error output failed to assert following PSLVERR=1.");
+
+    property p_error_cleared_on_idle;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (error) |=> (!error);
+    endproperty
+    a_error_cleared_on_idle: assert property(p_error_cleared_on_idle) 
+        else $error("[SVA FAIL] Group 13: error output failed to clear on FSM return to IDLE (pulse exceeded 1 cycle).");
+
+endinterface
