@@ -1,22 +1,9 @@
-// ============================================================================
-// apb_monitor.sv
-// Role: Passively observes the APB bus and DUT output signals
-//       Captures one transaction per completed APB transfer
-//       (PSEL=1 && PENABLE=1 && PREADY=1)
-// KEY FIX: Changed from forever loop to finite for loop (num_transactions)
-//          Added capture of transfer_done and error (previously missing)
-//          Added output-side functional coverage
-// ============================================================================
-
 class apb_monitor;
 
     virtual apb_if                  vif;
     mailbox #(apb_transaction)      mbx_m2s;    // To scoreboard
     apb_transaction                 mon_trans;  // Used by covergroup
 
-    // ----------------------------------------------------------
-    // Output-side Functional Coverage
-    // ----------------------------------------------------------
     covergroup mon_cg;
         PWRITE_OBS: coverpoint mon_trans.PWRITE {
             bins write = {1};
@@ -59,11 +46,6 @@ class apb_monitor;
         for (int i = 0; i < `num_transactions; i++) begin
             apb_transaction captured;
 
-            // -------------------------------------------------
-            // Wait for APB transfer completion point:
-            // PSEL=1 && PENABLE=1 && PREADY=1 simultaneously
-            // This is the exact cycle the DUT samples the bus
-            // -------------------------------------------------
             @(vif.cb_monitor);
             while (!(vif.cb_monitor.PSEL &&
                      vif.cb_monitor.PENABLE &&
@@ -71,9 +53,6 @@ class apb_monitor;
                 @(vif.cb_monitor);
             end
 
-            // -------------------------------------------------
-            // Capture full bus state at transfer completion
-            // -------------------------------------------------
             captured = new();
 
             // APB Master bus outputs
