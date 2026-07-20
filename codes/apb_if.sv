@@ -80,7 +80,14 @@ interface apb_if(input bit PCLK, input bit PRESETn);
         (PSEL && PENABLE && PREADY && !transfer) |=> (!PSEL);
     endproperty
     a_psel_deasserts_after_completion: assert property(p_psel_deasserts_after_completion) 
-        else $error("[SVA FAIL] Group 3: PSEL failed to deassert after transaction completion when no new transfer is pending.");
+        else $error("[SVA FAIL] Group 3: PSEL failed to deassert after transaction completion (FSM must return to IDLE).");
+
+    property p_psel_asserts_after_completion;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE && PREADY && transfer) |=> (PSEL);
+    endproperty
+    a_psel_asserts_after_completion: assert property(p_psel_asserts_after_completion) 
+        else $error("[SVA FAIL] Group 3: PSEL failed to assert after transaction completion (FSM must return to setup).");
 
     property p_penable_exactly_1_cycle;
         @(posedge PCLK) disable iff (!PRESETn)
@@ -103,26 +110,36 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     a_penable_deasserts_after_completion: assert property(p_penable_deasserts_after_completion) 
         else $error("[SVA FAIL] Group 4: PENABLE failed to deassert after PREADY=1 completion edge.");
 
+    // ---------------------------------------------------------
+    // GROUP 5/6/9/11: Payload Stability (SETUP and ACCESS phases)
+    // ---------------------------------------------------------
     property p_pwrite_stable;
         @(posedge PCLK) disable iff (!PRESETn)
         (PSEL && !(PENABLE && PREADY)) |=> ##1 $stable(PWRITE);
     endproperty
     a_pwrite_stable: assert property(p_pwrite_stable) 
-        else $error("[SVA FAIL] Group 5/8: PWRITE toggled mid-transaction.");
+        else $error("[SVA FAIL] Group 5: PWRITE changed mid-transaction.");
 
     property p_paddr_stable;
         @(posedge PCLK) disable iff (!PRESETn)
-        (PSEL && PWRITE && PENABLE && !(PREADY)) |=> $stable(PADDR);
+        (PSEL && !(PENABLE && PREADY)) |=> ##1 $stable(PADDR);
     endproperty
     a_paddr_stable: assert property(p_paddr_stable) 
-        else $error("[SVA FAIL] Group 6/9: PADDR changed mid-transaction (must remain locked during wait states).");
+        else $error("[SVA FAIL] Group 6: PADDR changed mid-transaction.");
 
     property p_pwdata_stable;
         @(posedge PCLK) disable iff (!PRESETn)
-        (PSEL && PWRITE && PENABLE && !(PREADY)) |=> $stable(PWRITE);
+        (PSEL && PWRITE && !(PENABLE && PREADY)) |=> ##1 $stable(PWDATA);
     endproperty
     a_pwdata_stable: assert property(p_pwdata_stable) 
-        else $error("[SVA FAIL] Group 6: PWDATA changed mid-write transaction.");
+        else $error("[SVA FAIL] Group 9: PWDATA changed mid-write transaction.");
+
+    property p_pstrb_stable;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PWRITE && !(PENABLE && PREADY)) |=> ##1 $stable(PSTRB);
+    endproperty
+    a_pstrb_stable: assert property(p_pstrb_stable) 
+        else $error("[SVA FAIL] Group 11: PSTRB changed mid-write transaction.");
 
     property p_pstrb_zero_during_read;
         @(posedge PCLK) disable iff (!PRESETn)
@@ -130,13 +147,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     endproperty
     a_pstrb_zero_during_read: assert property(p_pstrb_zero_during_read) 
         else $error("[SVA FAIL] Group 11: PSTRB must be 4'b0000 during read operations.");
-
-    property p_pstrb_stable;
-        @(posedge PCLK) disable iff (!PRESETn)
-        (PSEL && PWRITE && PENABLE && !(PREADY)) |=> $stable(PSTRB);
-    endproperty
-    a_pstrb_stable: assert property(p_pstrb_stable) 
-        else $error("[SVA FAIL] Group 11: PSTRB changed mid-write transaction.");
 
     property p_transfer_done_on_completion;
         @(posedge PCLK) disable iff (!PRESETn)
@@ -165,5 +175,19 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     endproperty
     a_error_cleared_on_idle: assert property(p_error_cleared_on_idle) 
         else $error("[SVA FAIL] Group 13: error output failed to clear on FSM return to IDLE (pulse exceeded 1 cycle).");
+
+    property p_controls_not_unknown;
+        @(posedge PCLK) disable iff (!PRESETn)
+        !$isunknown({PSEL, PENABLE, PWRITE});
+    endproperty
+    a_controls_not_unknown: assert property(p_controls_not_unknown)
+        else $error("[SVA FAIL] Group 14: APB Control signals floated to 'x' or 'z'.");
+
+    property p_pready_not_unknown;
+        @(posedge PCLK) disable iff (!PRESETn)
+        (PSEL && PENABLE) |-> !$isunknown(PREADY);
+    endproperty
+    a_pready_not_unknown: assert property(p_pready_not_unknown)
+        else $error("[SVA FAIL] Group 14: PREADY floated to 'x' or 'z' during ACCESS phase.");
 
 endinterface
