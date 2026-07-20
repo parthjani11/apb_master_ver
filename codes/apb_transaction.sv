@@ -1,14 +1,5 @@
-// ============================================================================
-// apb_transaction.sv
-// Base transaction + 8 directed child classes
-// KEY FIX: virtual copy() added to base + all child classes
-// ============================================================================
-
 class apb_transaction;
 
-    // ----------------------------------------------------------
-    // RAND — Stimulus (master user inputs + simulated slave responses)
-    // ----------------------------------------------------------
     rand logic                       transfer;
     rand logic                       write_read;
     rand logic [`addr_width-1:0]     addr_in;
@@ -19,9 +10,6 @@ class apb_transaction;
     rand logic                       PSLVERR;    // Slave error response
     rand int unsigned                wait_cycles; // How many cycles PREADY is held low
 
-    // ----------------------------------------------------------
-    // NON-RAND — Observed APB bus signals (captured by monitor)
-    // ----------------------------------------------------------
     logic [`addr_width-1:0]      PADDR;
     logic                        PWRITE;
     logic                        PSEL;
@@ -31,9 +19,6 @@ class apb_transaction;
     logic                        transfer_done;
     logic                        error;
 
-    // ----------------------------------------------------------
-    // BASE CONSTRAINTS
-    // ----------------------------------------------------------
     constraint c_transfer_active { transfer  == 1; }           // Always initiate a transfer
     constraint c_wait_cycles     { wait_cycles inside {[0:4]}; }
     constraint c_strb_valid      {
@@ -45,10 +30,6 @@ class apb_transaction;
         };
     }
 
-    // ----------------------------------------------------------
-    // COPY METHOD (virtual — preserves derived type via polymorphism)
-    // Copies all field values into a fresh apb_transaction object
-    // ----------------------------------------------------------
     virtual function apb_transaction copy();
         apb_transaction t = new();
         t.transfer    = this.transfer;
@@ -64,13 +45,6 @@ class apb_transaction;
 
 endclass
 
-
-// ============================================================================
-// CHILD TRANSACTION CLASSES — Directed Test Constraints
-// Each overrides copy() to preserve its own type through mailboxes
-// ============================================================================
-
-// 1. Standard Read/Write — no errors, no wait states, full strobe
 class apb_rw_transaction extends apb_transaction;
     constraint c_wait_cycles  { wait_cycles == 0; }
     constraint c_no_error     { PSLVERR == 0; }
@@ -86,8 +60,6 @@ class apb_rw_transaction extends apb_transaction;
     endfunction
 endclass
 
-
-// 2. Wait State Testing — 3 to 10 wait cycles before PREADY
 class apb_wait_state_transaction extends apb_transaction;
     constraint c_wait_cycles { wait_cycles inside {[3:10]}; }
     constraint c_full_strobe { strb_in == 4'b1111; }
@@ -104,7 +76,6 @@ class apb_wait_state_transaction extends apb_transaction;
 endclass
 
 
-// 3. Error Response Testing — slave asserts PSLVERR=1
 class apb_error_transaction extends apb_transaction;
     constraint c_error_active    { PSLVERR == 1; }
     constraint c_error_wait_time { wait_cycles inside {[0:5]}; }
@@ -119,8 +90,6 @@ class apb_error_transaction extends apb_transaction;
     endfunction
 endclass
 
-
-// 4. Byte Strobe Testing — partial byte lane write operations
 class apb_strobe_transaction extends apb_transaction;
     constraint c_is_write      { write_read == 1; }
     constraint c_clean_run     { PSLVERR == 0; wait_cycles == 0; }
@@ -142,8 +111,6 @@ class apb_strobe_transaction extends apb_transaction;
     endfunction
 endclass
 
-
-// 5. Address Toggle / Boundary Testing
 class apb_toggle_transaction extends apb_transaction;
     constraint c_toggle_patterns {
         addr_in inside {5'b00000, 5'b11111, 5'b01010, 5'b10101};
@@ -160,8 +127,6 @@ class apb_toggle_transaction extends apb_transaction;
     endfunction
 endclass
 
-
-// 6. Data Bus Stress Patterns — all-zero, all-one, alternating
 class apb_data_pattern_txn extends apb_transaction;
     constraint c_is_write   { write_read == 1; }
     constraint c_clean_run  { PSLVERR == 0; wait_cycles == 0; }
@@ -184,8 +149,6 @@ class apb_data_pattern_txn extends apb_transaction;
     endfunction
 endclass
 
-
-// 7. Read Data Coverage — forces PRDATA into specific coverage bins
 class apb_read_coverage_transaction extends apb_transaction;
     constraint c_is_read    { write_read == 0; }
     constraint c_clean_run  { PSLVERR == 0; wait_cycles == 0; }
@@ -203,8 +166,6 @@ class apb_read_coverage_transaction extends apb_transaction;
     endfunction
 endclass
 
-
-// 8. Back-to-Back Transfers — transfer=1 always, no idle gaps
 class apb_transfer_transaction extends apb_transaction;
     constraint c_transfer  { transfer == 1; }
     constraint c_clean_run { PSLVERR == 0; wait_cycles == 0; }
