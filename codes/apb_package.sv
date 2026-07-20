@@ -1,11 +1,3 @@
-// ============================================================================
-// apb_package.sv — NEW FILE (was missing entirely from original project)
-// Includes all class files in strict dependency order:
-//   transaction → gen → driver → monitor → ref_model → scoreboard → env → test
-// apb_if.sv is NOT included here — interfaces are modules, not classes,
-// and must be compiled before this package as a separate compilation unit
-// ============================================================================
-
 package apb_package;
 
     `include "defines.svh"          // Macros — global preprocessor scope
@@ -20,12 +12,3 @@ package apb_package;
     `include "apb_test.sv"          // Test classes
 
 endpackage
-
-// ============================================================================
-// COMPILATION ORDER NOTE (for Makefile / vcs / questa run script):
-//   Step 1: defines.svh      (included by both apb_if.sv and this package)
-//   Step 2: apb_if.sv        (interface module — standalone compile)
-//   Step 3: apb_package.sv   (this file — imports everything above)
-//   Step 4: apb_master.sv    (RTL DUT — must be available separately)
-//   Step 5: top.sv           (imports apb_package, instantiates interface + DUT)
-// ============================================================================
