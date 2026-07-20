@@ -1,13 +1,3 @@
-// ============================================================================
-// apb_scoreboard.sv
-// KEY FIX: Changed from forever loop to finite for loop
-//          fork...join get from both mailboxes concurrently per transaction
-//          Separate write/read comparison (not comparing PRDATA on writes)
-//          Failure queue struct for detailed error log
-//          print_summary() called after each phase
-//          reset_counts() allows per-phase clean reporting in regression
-// ============================================================================
-
 class apb_scoreboard;
 
     mailbox #(apb_transaction)  mbx_rm2s;   // Expected from reference model
@@ -17,9 +7,6 @@ class apb_scoreboard;
     int mismatch_count;
     int total_count;
 
-    // ----------------------------------------------------------
-    // Failure record — captures all context on a mismatch
-    // ----------------------------------------------------------
     typedef struct {
         time                         fail_time;
         string                       operation;
