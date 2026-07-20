@@ -2,9 +2,6 @@
 
 interface apb_if(input bit PCLK, input bit PRESETn);
 
-    // ----------------------------------------------------------
-    // APB Bus Signals  Master Outputs (driven by DUT)
-    // ----------------------------------------------------------
     logic [`addr_width-1:0]      PADDR;
     logic                        PSEL;
     logic                        PENABLE;
@@ -12,32 +9,20 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     logic [`data_width-1:0]      PWDATA;
     logic [(`data_width/8)-1:0]  PSTRB;
 
-    // ----------------------------------------------------------
-    // APB Bus Signals  Slave Outputs (driven by testbench/driver)
-    // ----------------------------------------------------------
     logic [`data_width-1:0]      PRDATA;
     logic                        PREADY;
     logic                        PSLVERR;
 
-    // ----------------------------------------------------------
-    // Master User Interface  Input side (driven by testbench/driver)
-    // ----------------------------------------------------------
     logic                        transfer;
     logic                        write_read;
     logic [`addr_width-1:0]      addr_in;
     logic [`data_width-1:0]      wdata_in;
     logic [(`data_width/8)-1:0]  strb_in;
 
-    // ----------------------------------------------------------
-    // Master User Interface  Output side (driven by DUT)
-    // ----------------------------------------------------------
     logic [`data_width-1:0]      rdata_out;
     logic                        transfer_done;
     logic                        error;
 
-    // ----------------------------------------------------------
-    // Driver Clocking Block
-    // ----------------------------------------------------------
     clocking cb_driver @(posedge PCLK);
         default input #1ns output #1ns;
         input  PADDR, PWDATA, PSTRB;
@@ -49,9 +34,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
         output addr_in, wdata_in, strb_in;
     endclocking
 
-    // ----------------------------------------------------------
-    // Monitor Clocking Block
-    // ----------------------------------------------------------
     clocking cb_monitor @(posedge PCLK);
         default input #1ns;
         input  PADDR, PWDATA, PSTRB;
@@ -63,19 +45,9 @@ interface apb_if(input bit PCLK, input bit PRESETn);
         input  PRESETn;
     endclocking
 
-    // ----------------------------------------------------------
-    // Modports
-    // ----------------------------------------------------------
     modport DRV (clocking cb_driver);
     modport MON (clocking cb_monitor);
 
-    // ============================================================================
-    // SystemVerilog Assertions (SVA) - Verification Plan Mapping
-    // ============================================================================
-
-    // ----------------------------------------------------------------------------
-    // GROUP 1 & 2: Reset and IDLE Behavior[cite: 14]
-    // ----------------------------------------------------------------------------
     property p_reset_deassert;
         @(posedge PCLK) (!PRESETn) |=> (!PSEL && !PENABLE && !transfer_done && !error);
     endproperty
@@ -89,9 +61,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     a_idle_no_transfer: assert property(p_idle_no_transfer) 
         else $error("[SVA FAIL] Group 2: APB bus did not remain in IDLE while transfer=0.");
 
-    // ----------------------------------------------------------------------------
-    // GROUP 3: PSEL Behavior[cite: 14]
-    // ----------------------------------------------------------------------------
     property p_psel_asserts_on_transfer;
         @(posedge PCLK) disable iff (!PRESETn)
         (!PSEL && !PENABLE && transfer) |=> (PSEL && !PENABLE);
@@ -113,9 +82,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     a_psel_deasserts_after_completion: assert property(p_psel_deasserts_after_completion) 
         else $error("[SVA FAIL] Group 3: PSEL failed to deassert after transaction completion when no new transfer is pending.");
 
-    // ----------------------------------------------------------------------------
-    // GROUP 4: PENABLE Behavior[cite: 14]
-    // ----------------------------------------------------------------------------
     property p_penable_exactly_1_cycle;
         @(posedge PCLK) disable iff (!PRESETn)
         (PSEL && !PENABLE) |=> (PSEL && PENABLE);
@@ -137,9 +103,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     a_penable_deasserts_after_completion: assert property(p_penable_deasserts_after_completion) 
         else $error("[SVA FAIL] Group 4: PENABLE failed to deassert after PREADY=1 completion edge.");
 
-    // ----------------------------------------------------------------------------
-    // GROUP 5, 6, 8, 9: Signal Stability (PWRITE, PADDR, PWDATA)[cite: 14]
-    // ----------------------------------------------------------------------------
     property p_pwrite_stable;
         @(posedge PCLK) disable iff (!PRESETn)
         (PSEL && !(PENABLE && PREADY)) |=> ##1 $stable(PWRITE);
@@ -161,9 +124,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     a_pwdata_stable: assert property(p_pwdata_stable) 
         else $error("[SVA FAIL] Group 6: PWDATA changed mid-write transaction.");
 
-    // ----------------------------------------------------------------------------
-    // GROUP 11: PSTRB Behavior[cite: 14]
-    // ----------------------------------------------------------------------------
     property p_pstrb_zero_during_read;
         @(posedge PCLK) disable iff (!PRESETn)
         (PSEL && !PWRITE) |-> (PSTRB == 0);
@@ -178,9 +138,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     a_pstrb_stable: assert property(p_pstrb_stable) 
         else $error("[SVA FAIL] Group 11: PSTRB changed mid-write transaction.");
 
-    // ----------------------------------------------------------------------------
-    // GROUP 12: transfer_done User Pulse[cite: 14]
-    // ----------------------------------------------------------------------------
     property p_transfer_done_on_completion;
         @(posedge PCLK) disable iff (!PRESETn)
         (PSEL && PENABLE && PREADY) |=> (transfer_done == 1);
@@ -195,9 +152,6 @@ interface apb_if(input bit PCLK, input bit PRESETn);
     a_transfer_done_pulse_width: assert property(p_transfer_done_pulse_width) 
         else $error("[SVA FAIL] Group 12: transfer_done pulse stretched beyond 1 PCLK cycle.");
 
-    // ----------------------------------------------------------------------------
-    // GROUP 13: error Output Pulse[cite: 14]
-    // ----------------------------------------------------------------------------
     property p_error_set_on_pslverr;
         @(posedge PCLK) disable iff (!PRESETn)
         (PSEL && PENABLE && PREADY && PSLVERR) |=> (error == 1);
