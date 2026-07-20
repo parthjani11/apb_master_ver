@@ -41,17 +41,11 @@ module top();
         .error        (intrf.error)
     );
 
-    apb_test        t1;
-    test_wait_state t2;
-    test_strobe     t3;
-    test_error      t4;
+    
     test_regression reg_tb;
 
     initial begin
-        t1     = new(intrf);
-        t2     = new(intrf);
-        t3     = new(intrf);
-        t4     = new(intrf);
+       
         reg_tb = new(intrf);
 	
         // Wait for reset to deassert before driving any stimulus
